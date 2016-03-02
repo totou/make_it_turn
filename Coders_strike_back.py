@@ -31,10 +31,29 @@ class Pod(object):
         self._y = val
         self.p.y = val
 
-    def get_num_tour_to_target(self):
+    def is_last_checkpoint(self):
+        return self.score == global_laps*len(global_checkpoints)-1
+
+    def get_distance_checkpoint(self, checkpointId=None):
+        if checkpointId is None:
+            checkpointId = self.target
+        return self.p.get_distance(global_checkpoints[checkpointId])
+
+    def setRank(self, pods):
+        self.rank=1
+        for pod in pods:
+            if pod != self :
+                if pod.score>self.score:
+                    self.rank+=1
+                if pod.score == self.score and self.get_distance_checkpoint() > pod.get_distance_checkpoint():
+                    self.rank+=1
+
+    def get_num_tour_to_target(self, target=None):
         """Talking in speed only, not direction..."""
+        if target is None:
+            target=global_checkpoints[self.target]
         if self.v.get_norm() > 0:
-            return int(self.p.get_distance(global_checkpoints[self.target]) / self.v.get_norm())
+            return int(self.p.get_distance(target) / self.v.get_norm())
         else:
             return int(100)
 
@@ -56,7 +75,7 @@ class Pod(object):
         max_speed = 200
         can_reach, nb = self.will_reach_target_in_rounds(5)
         if can_reach and nb <= 5:
-            if self.get_angle_to_target(get_next_target_id(self.target)) < 45:
+            if self.get_angle_to_target(get_next_target(self.target)) < 45:
                 return max_speed
             return 0
             #return int(max_speed * nb / 5)
@@ -188,7 +207,7 @@ class Point(object):
         y=self.y+dist_max*math.sin(rad)
         return Point(x,y)
 
-    def angleThreePoint(self,point1,point2):
+    def angleThreePoint(self, point1, point2):
         do1=self.get_distance(point1)
         do2=self.get_distance(point2)
         d12=point1.get_distance(point2)
@@ -228,6 +247,11 @@ def get_next_target_id(current_target_index):
     else:
         return 0
 
+def get_next_target(current_target_index):
+    if current_target_index < len(global_checkpoints)-1:
+        return global_checkpoints[current_target_index+1]
+    else:
+        return None
 
 def calculate_new_direction(pod, ignore_next=True):
     curr_target = global_checkpoints[pod.target]
