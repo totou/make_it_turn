@@ -1,3 +1,6 @@
+import sys
+import math
+
 class Pod(object):
     def __init__(self, x, y, vx, vy, angle, targetCheckpoint, score=0):
         self._x = x
@@ -73,22 +76,42 @@ class Pod(object):
             nb = self.get_num_tour_to_target()
         return curr_vect - self.v * nb
 
-    def next_position(self):
-        return Point(self.p.x + self.v.x, self.p.y + self.v.y)
+    def next_position(self, n=1):
+        return Point(self.p.x + self.v.x*global_vattenuation**(n-1), self.p.y + self.v.y*global_vattenuation**(n-1))
 
     def activate_shield(self):
-        for epod in global_ennemy_pods:
-            if epod.next_position().get_distance(self.next_position()) < 800:
-                print("Activate SHIELD", file=sys.stderr)
-                return True
+        for pod in global_my_pods+global_ennemy_pods:
+            if pod != self:
+                if pod.next_position().get_distance(self.next_position()) < 800:
+                    #check speed to validate vmax ?
+                    if pod.v.get_norm()+self.v.get_norm() < global_vmax*0.2:
+                        return False
+                    #check angle
+                    if Point(0,0).angleThreePoint(pod.v.to_Point(), self.v.to_Point()) < 25:
+                        return False
+                    print("Activate SHIELD", file=sys.stderr)
+                    return True
         return False
 
     def get_angle_to_target(self, targeting=None):
         if targeting is None:
-            targeting = self.target
+            targeting = global_checkpoints[self.target]
         new = self.p.get_transposed_from_angle(self.angle)
-        return self.p.angleThreePoint(new, global_checkpoints[targeting])
+        return self.p.angleThreePoint(new, targeting)
 
+    def __str__(self):
+        res = ''
+        # res+="Point {0}\n".format(self.p)
+        # res+="Vitesse {0}\n".format(self.v)
+        # res+="Angle {0}\n".format(self.angle)
+        # res+="Checkpoint {0}\n".format(self.target)
+        # res+="Score {0}\n".format(self.score)
+        # res+="Rank {0}\n".format(self.rank)
+        return res
+
+    # def goto(self, point, angle, speed):
+    #     #line between two points
+    #     #line
 
 class Vector(object):
     def __init__(self, x, y):
@@ -116,9 +139,12 @@ class Vector(object):
     def get_norm(self):
         return math.sqrt(self.x ** 2 + self.y ** 2)
 
+    def to_Point(self):
+        return Point(self.x,self.y)
+
 class Point(object):
 
-    def __init__(self, x=None, y=None):
+    def __init__(self, x, y):
         self.x = x
         self.y = y
 
@@ -169,6 +195,19 @@ class Point(object):
         if do1==0 or do2==0:
             return 0
         return math.degrees(math.acos((do1**2+do2**2-d12**2)/(2*do1*do2)))
+
+    def angleThreePoint_signed(self,point1,point2):
+        #same thing but with signed on angle this time
+        #copy paste stack untested
+        a = point1.x - self.x
+        b = point1.y - self.y
+        c = point1.x - point2.x
+        d = point1.y - point2.y
+
+        atanA = math.atan2(a, b)
+        atanB = math.atan2(c, d)
+
+        return math.degrees(atanB - atanA)
 
 
     def get_circle(self, dist_max, division=400):
@@ -225,12 +264,12 @@ def calculate_new_direction(pod, ignore_next=True):
 
 
 
+global_vmax = 1200
+global_vattenuation = 0.85
+global_max_rotation = 18
 global_my_pods = [None, None]
 global_ennemy_pods = [None, None]
 global_checkpoints = []
-
-import sys
-import math
 
 # Auto-generated code below aims at helping you parse
 # the standard input according to the problem statement.
@@ -245,6 +284,7 @@ if checkpoint_count != len(global_checkpoints):
     print("Error, bad checkpoint input")
 
 # game loop
+global_turn = 0
 while True:
     for i in range(2):
         x, y, vx, vy, angle, nextCheckPointId = [int(j) for j in input().split()]
@@ -273,3 +313,4 @@ while True:
         # print("8000 4500 100")
         # print("8000 4500 100")
 
+    global_turn += 1
