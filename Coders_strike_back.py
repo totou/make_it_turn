@@ -1,6 +1,3 @@
-import sys
-import math
-
 class Pod(object):
     def __init__(self, x, y, vx, vy, angle, targetCheckpoint, score=0):
         self._x = x
@@ -312,21 +309,20 @@ global_turn = 0
 while True:
     for i in range(2):
         x, y, vx, vy, angle, nextCheckPointId = [int(j) for j in input().split()]
-        if global_my_pods[i] is not None and nextCheckPointId != global_my_pods[i].target:
-            global_my_pods[i] = Pod(x, y, vx, vy, angle, nextCheckPointId, score=global_my_pods[i].score + 1)
-        elif global_my_pods[i] is not None:
-            global_my_pods[i] = Pod(x, y, vx, vy, angle, nextCheckPointId, score=global_my_pods[i].score)
-        else:
+        if global_turn == 0:
             global_my_pods[i] = Pod(x, y, vx, vy, angle, nextCheckPointId)
+        else:
+            if nextCheckPointId != global_my_pods[i].target:
+                global_my_pods[i].score += 1
+            global_my_pods[i] = Pod(x, y, vx, vy, angle, nextCheckPointId, score=global_my_pods[i].score)
     for i in range(2):
         x, y, vx, vy, angle, next_check_point_id = [int(j) for j in input().split()]
-        #global_ennemy_pods[i] = Pod(x, y, vx, vy, angle, next_check_point_id)
-        if global_ennemy_pods[i] is not None and next_check_point_id != global_ennemy_pods[i].target:
-            global_ennemy_pods[i] = Pod(x, y, vx, vy, angle, next_check_point_id, score=global_ennemy_pods[i].score + 1)
-        elif global_ennemy_pods[i] is not None:
-            global_ennemy_pods[i] = Pod(x, y, vx, vy, angle, next_check_point_id, score=global_ennemy_pods[i].score)
-        else:
+        if global_turn == 0:
             global_ennemy_pods[i] = Pod(x, y, vx, vy, angle, next_check_point_id)
+        else:
+            if next_check_point_id != global_ennemy_pods[i].target:
+                global_ennemy_pods[i].score += 1
+            global_ennemy_pods[i] = Pod(x, y, vx, vy, angle, next_check_point_id, score=global_ennemy_pods[i].score)
 
 
     # Write an action using print
