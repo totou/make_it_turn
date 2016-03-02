@@ -262,7 +262,7 @@ while True:
         elif global_ennemy_pods[i] is not None:
             global_ennemy_pods[i] = Pod(x, y, vx, vy, angle, next_check_point_id, score=global_ennemy_pods[i].score)
         else:
-            global_ennemy_pods[i] = Pod(x, y, vx, vy, angle, nextCheckPointId)
+            global_ennemy_pods[i] = Pod(x, y, vx, vy, angle, next_check_point_id)
 
 
     # Write an action using print
