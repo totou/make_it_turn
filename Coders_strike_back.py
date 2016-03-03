@@ -134,9 +134,10 @@ class Pod(object):
             target = self.target
         next_point = self.p
         for i in range(num_rounds):
-            next_point += self.v * math.pow(global_vattenuation, i)
-            if target.get_distance(next_point) < checkpoint_size:
-                print("Reaching target in {} turns".format(i+1), file=sys.stderr)
+            new_v = self.v * math.pow(global_vattenuation, i)
+            next_point += new_v
+            if target.get_distance(next_point) < checkpoint_size and new_v.get_norm() > 100:
+                #print("Reaching target in {} turns".format(i+1), file=sys.stderr)
                 return True, i+1
         return False, 0
 
@@ -150,10 +151,19 @@ class Pod(object):
             return 0
         if reachable_in is not None:
             #print("Reaching target in {} turns".format(reachable_in), file=sys.stderr)
-            if self.get_angle_to_target(self.next_target) < 45:
-                print("Full thrust", file=sys.stderr)
+            if self.get_angle_to_target(self.next_target) < 30:
+                #print("Full thrust", file=sys.stderr)
                 return max_speed
-            print("Stop thrust", file=sys.stderr)
+            #print("Stop thrust", file=sys.stderr)
+            #check thrust to still pass in checkpoint
+            #pod_list_thrust = [[self.next_pod_for_destination(self.next_target, x), x] for x in range(max_speed,-1,-20)]
+            # print('pod_list_thrust {}'.format(pod_list_thrust), file=sys.stderr)
+            #for pod_t, thrust in pod_list_thrust:
+            #    can_reach_t, _ = pod_t.will_reach_target_in_rounds(num_rounds-1,checkpoint_size)
+            #    # print('Reach {}, thrust {}'.format(can_reach_t,thrust), file=sys.stderr)
+            #    if can_reach_t and self.next_pod_for_destination(self.next_target, thrust).v.get_norm() < 10:
+            #        return thrust
+            #print('already going to checkpoint', file=sys.stderr)
             return 0
             #return int(max_speed * nb / 5)
         return max_speed
@@ -188,7 +198,7 @@ class Pod(object):
     def get_angle_and_thrust_max(self, deep_max=3):
         """Return bool, angle, thrust, speed max"""
         angles = [-18, 0, 18]
-        thrusts = [0, 200]
+        thrusts = [0, 100, 200]
         combinations = []
         for a in angles:
             for t in thrusts:
@@ -197,10 +207,12 @@ class Pod(object):
         if deep_max <= 0:
             for a, t in combinations:
                 pod = self.next_pod_with_angle(a, t)
-                res[(a, t)] = (pod.will_reach_target_in_rounds(1)[0], a, t, pod.v.get_norm_to_target(self.next_target))
+                res[(a, t)] = (pod.get_distance_checkpoint() < 600, a, t, pod.v.get_norm_to_target(self.next_target))
         else:
             for a, t in combinations:
                 res[(a, t)] = self.next_pod_with_angle(a, t).get_angle_and_thrust_max(deep_max-1)
+        if deep_max == 3:
+            print("RES {}".format(res), file=sys.stderr)
         feasible = False
         max_speed = 0
         res_angle = 0
@@ -223,9 +235,6 @@ class Pod(object):
         curr_vect = target - self.p
         #print("Direction to target is {}".format(curr_vect), file=sys.stderr)
         #print("Speed is {}".format(self.v), file=sys.stderr)
-        if self.is_on_finish_line():
-            print("FINISH HIM", file=sys.stderr)
-            return curr_vect
         if reachable_in is None:
             reachable_in = self.get_num_tour_to_target()
         for i in range(min(reachable_in, 10)):
@@ -234,6 +243,9 @@ class Pod(object):
 
     def next_position(self, n=1):
         return Point(self.p.x + self.v.x*global_vattenuation**(n-1), self.p.y + self.v.y*global_vattenuation**(n-1))
+
+    def next_speed(self, n=1):
+        return Vector(self.v.x*global_vattenuation**(n-1), self.v.y*global_vattenuation**(n-1))
 
     def activate_shield(self):
         if global_turn < 20:
@@ -254,7 +266,7 @@ class Pod(object):
     def get_angle_to_target(self, targeting=None):
         if targeting is None:
             targeting = self.target
-        new = self.p.get_transposed_from_angle(self.angle)
+        new = self.p.get_transposed_from_angle(self.angle, 100)
         return self.p.angle_three_point(new, targeting)
 
     def set_behaviour(self, other, force_behaviour=None):
@@ -308,6 +320,9 @@ class Vector(object):
 
     def __rmul__(self, other):
         return self.__mul__(other)
+
+    def __pow__(self, other):
+        return Vector(self.x ** other, self.y ** other)
 
     def get_norm(self):
         return math.sqrt(self.x ** 2 + self.y ** 2)
@@ -374,7 +389,12 @@ class Point(object):
         d12 = point1.get_distance(point2)
         if do1 == 0 or do2 == 0:
             return 0
-        return math.degrees(math.acos((do1**2+do2**2-d12**2)/(2*do1*do2)))
+        res = (do1**2+do2**2-d12**2)/(2*do1*do2)
+        if res > 1:
+            res = 1
+        if res < -1:
+            res = -1
+        return math.degrees(math.acos(res))
 
     def angle_three_point_signed(self, point1, point2):
         #same thing but with signed on angle this time
@@ -458,7 +478,7 @@ def calculate_new_direction(pod, ignore_next=True):
 def calculate_new_direction_new_method(pod, ignore_next=True):
     nb_turns_to_next_target = pod.turn_needed_to_orientate_to_next_checkpoint()
     can_reach, nb = pod.will_reach_target_in_rounds(max(5, nb_turns_to_next_target))# At least check 5 rounds in advance
-    print("Can reach point {} in {} turns".format(can_reach, nb), file=sys.stderr)
+    #print("Can reach point {} in {} turns".format(can_reach, nb), file=sys.stderr)
     if not can_reach:
         thrust = pod.calculate_new_thrust(nb_turns_to_next_target)
         curr_vect = pod.calculate_new_direction_for_target()
@@ -467,8 +487,10 @@ def calculate_new_direction_new_method(pod, ignore_next=True):
         #new_target = pod.p.add_vector(curr_vect - pod.v * max(1, (pod.get_num_tour_to_target()-1)))
         print("{} {} {}".format(int(new_target.x), int(new_target.y), thrust))
     else:
-        #reachable, angle_to_follow, thrust, speed = pod.get_angle_and_thrust_max(deep_max=min(nb_turns_to_next_target, 3))
-        reachable = False
+        if nb <= 3 and False:
+            reachable, angle_to_follow, thrust, speed = pod.get_angle_and_thrust_max(deep_max=min(nb_turns_to_next_target, 3))
+        else:
+            reachable = False
         if reachable:
             # New technique
             print("Reachable {} {} {}".format(angle_to_follow, thrust, speed), file=sys.stderr)
@@ -477,7 +499,7 @@ def calculate_new_direction_new_method(pod, ignore_next=True):
             print("{} {} {}".format(int(new_target.x), int(new_target.y), thrust))
         else:
             # Like old times
-            thrust = pod.calculate_new_thrust(nb_turns_to_next_target)
+            thrust = pod.calculate_new_thrust(nb_turns_to_next_target, reachable_in=nb)
             curr_vect = pod.calculate_new_direction_for_target(pod.next_target, reachable_in=nb)
             new_target = pod.p.add_vector(curr_vect)
             print("{} {} {}".format(int(pod.next_target.x), int(pod.next_target.y), thrust))
