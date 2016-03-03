@@ -34,7 +34,7 @@ def solver_x2(p1,p2,p3):
     return a, b, c
 
 class Pod(object):
-    def __init__(self, x, y, vx, vy, angle, targetCheckpoint, score=0):
+    def __init__(self, x, y, vx, vy, angle, target_checkpoint, score=0, rank=None):
         self._x = x
         self._y = y
         self.p = Point(x, y)
@@ -42,10 +42,11 @@ class Pod(object):
         self.vy = vy
         self.v = Vector(vx, vy)
         self.angle = angle
-        self.target = targetCheckpoint
+        self.target_id = target_checkpoint
         self.score = score
         #for 1 to 4 depending on position
-        self.rank = 0
+        self.rank = rank
+        self.behaviour = "race" # Default behaviour is race
 
     @property
     def x(self):
@@ -65,27 +66,66 @@ class Pod(object):
         self._y = val
         self.p.y = val
 
+    @property
+    def target(self):
+        return global_checkpoints[self.target_id]
+
+    @property
+    def next_target_id(self):
+        if self.target_id < len(global_checkpoints)-1:
+            return self.target_id + 1
+        else:
+            return 0
+
+    @property
+    def next_target(self):
+        if self.target_id < len(global_checkpoints)-1:
+            if self.is_last_checkpoint():
+                return global_checkpoints[self.target_id]
+            else:
+                return global_checkpoints[self.target_id + 1]
+        else:
+            return global_checkpoints[0]
+
+    def angle_between_speed_and_curr_target(self):
+        curr_dir = Vector(100*math.cos(math.radians(self.angle)), 100*math.sin(math.radians(self.angle)))
+        direction_to_take = self.next_target - self.target
+        #print(self.v, file=sys.stderr)
+        #print((self.target - self.p).to_Point(), file=sys.stderr)
+        r = Point(0, 0).angle_three_point(self.v.to_Point(), (self.target - self.p).to_Point())
+        #print("Angle between speed {} and target {} is {} degrees".format(self.v, self.target_id, r), file=sys.stderr)
+        return r
+
+
+    def angle_to_make_for_next_target(self):
+        curr_dir = Vector(100*math.cos(math.radians(self.angle)), 100*math.sin(math.radians(self.angle)))
+        direction_to_take = self.next_target - self.target
+        return Point(0, 0).angle_three_point(curr_dir.to_Point(), direction_to_take.to_Point())
+
+    def turn_needed_to_orientate_to_next_checkpoint(self):
+        return max(0, math.ceil(self.angle_to_make_for_next_target()/global_max_rotation))
+
     def is_last_checkpoint(self):
         return self.score == global_laps*len(global_checkpoints)-1
 
-    def get_distance_checkpoint(self, checkpointId=None):
-        if checkpointId is None:
-            checkpointId = self.target
-        return self.p.get_distance(global_checkpoints[checkpointId])
+    def get_distance_checkpoint(self, checkpoint_id=None):
+        if checkpoint_id is None:
+            checkpoint_id = self.target_id
+        return self.p.get_distance(global_checkpoints[checkpoint_id])
 
-    def setRank(self, pods):
-        self.rank=1
+    def set_rank(self, pods):
+        self.rank = 1
         for pod in pods:
-            if pod != self :
-                if pod.score>self.score:
-                    self.rank+=1
+            if pod != self:
+                if pod.score > self.score:
+                    self.rank += 1
                 if pod.score == self.score and self.get_distance_checkpoint() > pod.get_distance_checkpoint():
-                    self.rank+=1
+                    self.rank += 1
 
     def get_num_tour_to_target(self, target=None):
         """Talking in speed only, not direction..."""
         if target is None:
-            target=global_checkpoints[self.target]
+            target = global_checkpoints[self.target_id]
         if self.v.get_norm() > 0:
             return int(self.p.get_distance(target) / self.v.get_norm())
         else:
@@ -93,16 +133,16 @@ class Pod(object):
 
     def will_reach_target_in_rounds(self, num_rounds,checkpoint_size,target=None):
         if target is None:
-            target = global_checkpoints[self.target]
+            target = self.target
         speed = self.v
         next_point = self.p
         for i in range(num_rounds):
             next_point += speed * math.pow(global_vattenuation, i)
             if target.get_distance(next_point) < checkpoint_size:
-                return (True, i+1)
-        return (False, 0)
+                return True, i+1
+        return False, 0
 
-    def calculate_new_thrust(self,num_rounds, checkpoint_size, attack_angle):
+    def calculate_new_thrust(self,num_rounds, checkpoint_size=600, attack_angle=0):
         max_speed = 200
         if global_turn==0:
             return max_speed
@@ -134,31 +174,36 @@ class Pod(object):
             print('already going to checkpoint', file=sys.stderr)
             return 0
             #return int(max_speed * nb / 5)
+        if self.get_num_tour_to_target() < global_will_reach_target:
+            return 0
         return max_speed
 
-    def next_pod(self,destination,thrust):
+    def next_pod_for_destination(self, destination, thrust):
         #first find angle
-        cur_proj = self.p.get_transposed_from_angle(self.angle,10)
+        cur_proj = self.p.get_transposed_from_angle(self.angle, 10)
         next_proj = destination
-        rotation = self.p.angleThreePoint_signed(cur_proj,next_proj)
+        rotation = self.p.angle_three_point_signed(cur_proj, next_proj)
         if rotation > global_max_rotation:
             rotation = global_max_rotation
         if rotation < -global_max_rotation:
             rotation = -global_max_rotation
+        return self.next_pod_with_angle(rotation, thrust)
+
+    def next_pod_with_angle(self, rotation, thrust):
         angle = self.angle+rotation
 
-        vx=self.vx+thrust*math.cos(math.radians(self.angle))
-        vy=self.vy+thrust*math.sin(math.radians(self.angle))
+        vx = self.vx+thrust*math.cos(math.radians(self.angle))
+        vy = self.vy+thrust*math.sin(math.radians(self.angle))
 
-        x=self.x+vx
-        y=self.y+vy
+        x = self.x+vx
+        y = self.y+vy
 
-        vx*=global_vattenuation
-        vy*=global_vattenuation
+        vx *= global_vattenuation
+        vy *= global_vattenuation
 
-        checkpointId=self.target
-        score=self.score
-        return Pod(x, y, vx, vy, angle, checkpointId, score)
+        checkpoint_id = self.target_id
+        score = self.score
+        return Pod(x, y, vx, vy, angle, checkpoint_id, score)
 
     def next_position(self, n=1):
         return Point(self.p.x + self.v.x*global_vattenuation**(n-1), self.p.y + self.v.y*global_vattenuation**(n-1))
@@ -171,7 +216,7 @@ class Pod(object):
                     if pod.v.get_norm()+self.v.get_norm() < global_vmax*0.2:
                         return False
                     #check angle
-                    if Point(0,0).angleThreePoint(pod.v.to_Point(), self.v.to_Point()) < 45:
+                    if Point(0, 0).angle_three_point(pod.v.to_Point(), self.v.to_Point()) < 25:
                         return False
                     print("Activate SHIELD", file=sys.stderr)
                     return True
@@ -179,7 +224,7 @@ class Pod(object):
 
     def get_angle_to_target(self, targeting=None):
         if targeting is None:
-            targeting = global_checkpoints[self.target]
+            targeting = self.target
         new = self.p.get_transposed_from_angle(self.angle)
         return self.p.angleThreePoint(new, targeting)
 
@@ -196,6 +241,7 @@ class Pod(object):
     # def goto(self, point, angle, speed):
     #     #line between two points
     #     #line
+
 
 class Vector(object):
     def __init__(self, x, y):
@@ -223,8 +269,17 @@ class Vector(object):
     def get_norm(self):
         return math.sqrt(self.x ** 2 + self.y ** 2)
 
+    def get_norm_to_target(self, target):# TODO check this function
+        angle_with_target = Point(0, 0).angle_three_point_signed(self.to_Point(), target)
+        return self.get_norm() * math.cos(math.radians(angle_with_target))
+
     def to_Point(self):
-        return Point(self.x,self.y)
+        return Point(self.x, self.y)
+
+    def __str__(self):
+        res = "Vector({},{})".format(self.x, self.y)
+        return res
+
 
 class Point(object):
 
@@ -252,10 +307,8 @@ class Point(object):
     def __repr__(self):
         return '{0} {1}'.format(int(self.x), int(self.y))
 
-
     def get_transposed(self, t, dist_max):
         return self.get_transposed_from_point(t.p, dist_max)
-
 
     def get_transposed_from_point(self, p, dist_max):
         dist_t = self.get_distance(p)
@@ -266,21 +319,21 @@ class Point(object):
         else:
             return p
 
-    def get_transposed_from_angle(self, angle_degre, dist_max=1):
-        rad=math.radians(angle_degre)
-        x=self.x+dist_max*math.cos(rad)
-        y=self.y+dist_max*math.sin(rad)
-        return Point(x,y)
+    def get_transposed_from_angle(self, angle_degree, dist_max=1):
+        rad = math.radians(angle_degree)
+        x = self.x+dist_max*math.cos(rad)
+        y = self.y+dist_max*math.sin(rad)
+        return Point(x, y)
 
-    def angleThreePoint(self,point1,point2):
-        do1=self.get_distance(point1)
-        do2=self.get_distance(point2)
-        d12=point1.get_distance(point2)
-        if do1==0 or do2==0:
+    def angle_three_point(self, point1, point2):
+        do1 = self.get_distance(point1)
+        do2 = self.get_distance(point2)
+        d12 = point1.get_distance(point2)
+        if do1 == 0 or do2 == 0:
             return 0
         return math.degrees(math.acos((do1**2+do2**2-d12**2)/(2*do1*do2)))
 
-    def angleThreePoint_signed(self,point1,point2):
+    def angle_three_point_signed(self, point1, point2):
         #same thing but with signed on angle this time
         #copy paste stack untested
         a = point1.x - self.x
@@ -293,18 +346,18 @@ class Point(object):
 
         return math.degrees(atanB - atanA)
 
-
     def get_circle(self, dist_max, division=400):
         res = []
-        for x in xrange(self.x - dist_max, self.x + dist_max, division):
+        for x in range(self.x - dist_max, self.x + dist_max, division):
             res.append(Point(x, self.y - dist_max))
-        for x in xrange(self.x - dist_max, self.x + dist_max, division):
+        for x in range(self.x - dist_max, self.x + dist_max, division):
             res.append(Point(x, self.y + dist_max))
-        for y in xrange(self.y - dist_max, self.y + dist_max, division):
+        for y in range(self.y - dist_max, self.y + dist_max, division):
             res.append(Point(self.x - dist_max, y))
-        for y in xrange(self.y - dist_max, self.y + dist_max, division):
+        for y in range(self.y - dist_max, self.y + dist_max, division):
             res.append(Point(self.x + dist_max, y))
         return list(set([self.get_transposed_from_point(p, dist_max) for p in res]))
+
 
 def get_next_target_id(current_target_index):
     if current_target_index < len(global_checkpoints)-1:
@@ -329,8 +382,8 @@ def runner(pod, agressive=False):
     if agressive:
         behavior_dict=agressive_runner
 
-    curr_target = global_checkpoints[pod.target]
-    next_target = global_checkpoints[get_next_target_id(pod.target)]
+    curr_target = pod.target
+    next_target = pod.next_target
     checkpoint_size = behavior_dict['checkpoint_size']
     angle_to_speed = curr_target.angleThreePoint(pod.p,next_target)
     num_turn = max(1,math.ceil(angle_to_speed/global_max_rotation))
@@ -422,6 +475,10 @@ global_max_rotation = 18
 global_my_pods = [None, None]
 global_ennemy_pods = [None, None]
 global_checkpoints = []
+global_will_reach_target = 5
+
+# Auto-generated code below aims at helping you parse
+# the standard input according to the problem statement.
 
 global_laps = int(input())
 checkpoint_count = int(input())
@@ -440,7 +497,7 @@ while True:
         if global_turn == 0:
             global_my_pods[i] = Pod(x, y, vx, vy, angle, nextCheckPointId)
         else:
-            if nextCheckPointId != global_my_pods[i].target:
+            if nextCheckPointId != global_my_pods[i].target_id:
                 global_my_pods[i].score += 1
             global_my_pods[i] = Pod(x, y, vx, vy, angle, nextCheckPointId, score=global_my_pods[i].score)
     for i in range(2):
@@ -448,13 +505,13 @@ while True:
         if global_turn == 0:
             global_ennemy_pods[i] = Pod(x, y, vx, vy, angle, next_check_point_id)
         else:
-            if next_check_point_id != global_ennemy_pods[i].target:
+            if next_check_point_id != global_ennemy_pods[i].target_id:
                 global_ennemy_pods[i].score += 1
             global_ennemy_pods[i] = Pod(x, y, vx, vy, angle, next_check_point_id, score=global_ennemy_pods[i].score)
 
-    all_pod=global_my_pods+global_ennemy_pods
+    all_pod = global_my_pods+global_ennemy_pods
     for pod in all_pod:
-        pod.setRank(all_pod)
+        pod.set_rank(all_pod)
         # print(pod, file=sys.stderr)
         # print(solver_x2(pod.p,global_checkpoints[pod.target],global_checkpoints[get_next_target_id(pod.target)]), file=sys.stderr)
 
