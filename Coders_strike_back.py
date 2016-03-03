@@ -151,7 +151,7 @@ class Pod(object):
             return 0
         if reachable_in is not None:
             #print("Reaching target in {} turns".format(reachable_in), file=sys.stderr)
-            if self.get_angle_to_target(self.next_target) < 30:
+            if self.get_angle_to_target(self.next_target) < 45:
                 #print("Full thrust", file=sys.stderr)
                 return max_speed
             #print("Stop thrust", file=sys.stderr)
@@ -257,7 +257,8 @@ class Pod(object):
                     #if pod.v.get_norm()+self.v.get_norm() < global_vmax*0.2:
                     #    return False
                     #check angle
-                    if Point(0, 0).angle_three_point(pod.v.to_Point(), self.v.to_Point()) < 25:
+                    if Point(0, 0).angle_three_point(pod.v.to_Point(), self.v.to_Point()) < 25 and \
+                        pod.v.get_norm() - self.v.get_norm() < global_vmax*0.2:
                         return False
                     print("Activate SHIELD", file=sys.stderr)
                     return True
