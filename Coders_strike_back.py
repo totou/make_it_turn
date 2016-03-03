@@ -135,16 +135,16 @@ class Pod(object):
                 return 0# Do not increase the angle
             if self.angle_between_speed_and_curr_target() > 40:
                 return 0
-            #if self.get_angle_to_target(self.next_target) < 35 and self.next_pod_for_destination(self.next_target, max_speed).will_reach_target_in_rounds(nb-1):
-            #    return int(max_speed)
+            if self.get_angle_to_target(self.next_target) < 35 and self.next_pod_for_destination(self.next_target, max_speed).will_reach_target_in_rounds(nb-1):
+                return int(max_speed)
             #check thrust to still pass in checkpoint
             pod_list_thrust=[[self.next_pod_for_destination(self.next_target,x),x]  for x in range(max_speed,-1,-20)]
             # print('pod_list_thrust {}'.format(pod_list_thrust), file=sys.stderr)
-            #for pod_t, thrust in pod_list_thrust:
-            #    can_reach_t, _ = pod_t.will_reach_target_in_rounds(num_rounds-1,checkpoint_size)
-            #    # print('Reach {}, thrust {}'.format(can_reach_t,thrust), file=sys.stderr)
-            #    if can_reach_t:
-            #        return thrust
+            for pod_t, thrust in pod_list_thrust:
+                can_reach_t, _ = pod_t.will_reach_target_in_rounds(num_rounds-1,checkpoint_size)
+                # print('Reach {}, thrust {}'.format(can_reach_t,thrust), file=sys.stderr)
+                if can_reach_t and self.next_pod_for_destination(self.next_target, thrust).v.get_norm() < 10:
+                    return thrust
             print('already going to checkpoint', file=sys.stderr)
             return 0
             #return int(max_speed * nb / 5)
