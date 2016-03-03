@@ -106,7 +106,7 @@ class Pod(object):
 
     def will_reach_target_in_rounds(self, num_rounds, checkpoint_size=600, target=None):
         if target is None:
-            target = global_checkpoints[self.target_id]
+            target = self.target
         next_point = self.p
         for i in range(num_rounds):
             next_point += self.v * math.pow(global_vattenuation, i)
@@ -133,23 +133,23 @@ class Pod(object):
                 return max_speed
             if angle_to_target > 18 and self.angle_between_speed_and_curr_target() < 5:
                 return 0# Do not increase the angle
-            #if self.angle_between_speed_and_curr_target() > 45:
-            #    return 0
+            if self.angle_between_speed_and_curr_target() > 40:
+                return 0
             #if self.get_angle_to_target(self.next_target) < 35 and self.next_pod_for_destination(self.next_target, max_speed).will_reach_target_in_rounds(nb-1):
             #    return int(max_speed)
             #check thrust to still pass in checkpoint
             pod_list_thrust=[[self.next_pod_for_destination(self.next_target,x),x]  for x in range(max_speed,-1,-20)]
             # print('pod_list_thrust {}'.format(pod_list_thrust), file=sys.stderr)
-            for pod_t, thrust in pod_list_thrust:
-                can_reach_t, _ = pod_t.will_reach_target_in_rounds(num_rounds-1,checkpoint_size)
-                # print('Reach {}, thrust {}'.format(can_reach_t,thrust), file=sys.stderr)
-                if can_reach_t:
-                    return thrust
+            #for pod_t, thrust in pod_list_thrust:
+            #    can_reach_t, _ = pod_t.will_reach_target_in_rounds(num_rounds-1,checkpoint_size)
+            #    # print('Reach {}, thrust {}'.format(can_reach_t,thrust), file=sys.stderr)
+            #    if can_reach_t:
+            #        return thrust
             print('already going to checkpoint', file=sys.stderr)
             return 0
             #return int(max_speed * nb / 5)
-        if self.get_num_tour_to_target() < global_will_reach_target:
-            return 0
+        #if self.get_num_tour_to_target() < global_will_reach_target:
+        #    return 0
         return max_speed
 
     def next_pod_for_destination(self, destination, thrust):
