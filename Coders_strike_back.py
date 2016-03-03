@@ -87,9 +87,9 @@ class Pod(object):
         if target is None:
             target=global_checkpoints[self.target]
         if self.v.get_norm() > 0:
-            return int(self.p.get_distance(target) / self.v.get_norm())
+            return math.ceil(self.p.get_distance(target) / self.v.get_norm())
         else:
-            return int(100)
+            return 100
 
     def will_reach_target_in_rounds(self, num_rounds,checkpoint_size,target=None):
         if target is None:
@@ -108,33 +108,36 @@ class Pod(object):
             return max_speed
         if self.activate_shield():
             return "SHIELD"
-        if self.get_angle_to_target() > attack_angle:
-            print('Angle too big do not thust: {}'.format(self.get_angle_to_target()), file=sys.stderr)
-            return 0
         can_reach, nb = self.will_reach_target_in_rounds(num_rounds,checkpoint_size)
-        if can_reach and nb <= num_rounds:
+        if can_reach and nb < num_rounds:
+            if self.get_angle_to_target() > attack_angle:
+                print('Angle too big do not thust: {}'.format(self.get_angle_to_target()), file=sys.stderr)
+                return 0
             if self.is_last_checkpoint():
+                print('last sprint', file=sys.stderr)
                 return max_speed
             #someone in the way -> CHAAAARGE
-            for i in range(nb):
-                my_pos = self.next_position(i)
-                for pod in global_my_pods+global_ennemy_pods:
-                    if pod != self:
-                        if pod.next_position(i).get_distance(my_pos) < 800:
-                            return max_speed
-            #check thrust to still pass in checkpoint
+            # for i in range(nb):
+            #     my_pos = self.next_position(i)
+            #     for pod in global_my_pods+global_ennemy_pods:
+            #         if pod != self:
+            #             if pod.next_position(i).get_distance(my_pos) < 800:
+            #                 print('CHARGE', file=sys.stderr)
+            #                 return max_speed
+            # #check thrust to still pass in checkpoint
             next_checkpoint=global_checkpoints[get_next_target_id(self.target)]
             pod_list_thrust=[[self.next_pod(next_checkpoint,x),x]  for x in range(max_speed,-1,-20)]
             # print('pod_list_thrust {}'.format(pod_list_thrust), file=sys.stderr)
             for pod_t, thrust in pod_list_thrust:
                 can_reach_t, _ = pod_t.will_reach_target_in_rounds(num_rounds-1,checkpoint_size)
                 # print('Reach {}, thrust {}'.format(can_reach_t,thrust), file=sys.stderr)
-                if can_reach_t:
+                if can_reach_t and pod_t.get_angle_to_target(next_checkpoint) < 20 :
                     return thrust
             print('already going to checkpoint', file=sys.stderr)
             return 0
             #return int(max_speed * nb / 5)
-        return max_speed
+        print('When in doubt', file=sys.stderr)
+        return 200
 
     def next_pod(self,destination,thrust):
         #first find angle
@@ -161,18 +164,27 @@ class Pod(object):
         return Pod(x, y, vx, vy, angle, checkpointId, score)
 
     def next_position(self, n=1):
-        return Point(self.p.x + self.v.x*global_vattenuation**(n-1), self.p.y + self.v.y*global_vattenuation**(n-1))
+        speed=self.v
+        n_speed=Vector(0,0)
+        for i in range(n):
+            n_speed += speed* global_vattenuation**(i)
+        return Point(self.p.x + n_speed.x, self.p.y + n_speed.y)
 
     def activate_shield(self):
-        for pod in global_my_pods+global_ennemy_pods:
+        for pod in global_ennemy_pods:
             if pod != self:
                 if pod.next_position().get_distance(self.next_position()) < 800:
                     #check speed to validate vmax ?
-                    if pod.v.get_norm()+self.v.get_norm() < global_vmax*0.2:
+                    print('Norm {}'.format(pod.v.get_norm()+self.v.get_norm()), file=sys.stderr)
+                    if pod.v.get_norm()+self.v.get_norm() < global_vmax*0.3:
                         return False
-                    #check angle
-                    if Point(0,0).angleThreePoint(pod.v.to_Point(), self.v.to_Point()) < 45:
-                        return False
+                    # #check angle
+                    print('angle {}'.format(Point(0,0).angleThreePoint(pod.v.to_Point(), self.v.to_Point())), file=sys.stderr)
+                    if Point(0,0).angleThreePoint(pod.v.to_Point(), self.v.to_Point()) < 45 :
+                        print('distance {}'.format(self.get_distance_checkpoint()), file=sys.stderr)
+                        if self.get_distance_checkpoint() > pod.v.get_norm()+self.v.get_norm()*5:
+                            return False
+
                     print("Activate SHIELD", file=sys.stderr)
                     return True
         return False
@@ -219,6 +231,9 @@ class Vector(object):
 
     def __rmul__(self, other):
         return self.__mul__(other)
+
+    def __pow__(self, other):
+        return Vector(self.x ** other, self.y ** other)
 
     def get_norm(self):
         return math.sqrt(self.x ** 2 + self.y ** 2)
@@ -333,20 +348,32 @@ def runner(pod, agressive=False):
     next_target = global_checkpoints[get_next_target_id(pod.target)]
     checkpoint_size = behavior_dict['checkpoint_size']
     angle_to_speed = curr_target.angleThreePoint(pod.p,next_target)
-    num_turn = max(1,math.ceil(angle_to_speed/global_max_rotation))
+    num_turn = max(1,math.ceil((180-angle_to_speed)/global_max_rotation))
     curr_vect = curr_target - pod.p
     next_vect = next_target - pod.p
-    #print("Target n is at {}".format(curr_vect.get_norm()), file=sys.stderr)
+    print("angle_to_speed {}".format(angle_to_speed), file=sys.stderr)
+    print("num_turn {}".format(num_turn), file=sys.stderr)
     #print("Target n+1 is at {}".format(next_vect.get_norm()), file=sys.stderr)
     curr_norm = curr_vect.get_norm()
     next_norm = next_vect.get_norm()
     speed = pod.calculate_new_thrust(num_turn, checkpoint_size, angle_to_speed)
     can_reach, number = pod.will_reach_target_in_rounds(num_turn, checkpoint_size)
     if not can_reach or pod.is_last_checkpoint():
-        new_target = pod.p.add_vector(curr_vect - pod.v * min(num_turn,max(1,(pod.get_num_tour_to_target()-1))) )
-        print("{} {} {}".format(new_target.x, new_target.y, speed))
+        print("num_turn nr {}".format(min(num_turn,max(1,(pod.get_num_tour_to_target())))), file=sys.stderr)
+        n_speed=Vector(0,0)
+        for i in range(min(num_turn,max(1,(pod.get_num_tour_to_target())))):
+            n_speed += pod.v* global_vattenuation **(i)
+        new_target = pod.p.add_vector(curr_vect - n_speed )
+        if pod.p.angleThreePoint(new_target,pod.p.get_transposed_from_angle(pod.angle,10)) > 60:
+            speed = 0
+        print("{} {} {}".format(int(new_target.x), int(new_target.y), speed))
     else:
-        print("{} {} {}".format(next_target.x, next_target.y, speed))
+        print("num_turn r {}".format(max(1,(pod.get_num_tour_to_target(next_target)))), file=sys.stderr)
+        n_speed=Vector(0,0)
+        for i in range(max(1,(pod.get_num_tour_to_target(next_target)))):
+            n_speed += pod.v* global_vattenuation **(i)
+        new_target = pod.p.add_vector(next_vect - n_speed )
+        print("{} {} {}".format(int(new_target.x), int(new_target.y), speed))
 
 
 global_bruiser_state = 'defense'
