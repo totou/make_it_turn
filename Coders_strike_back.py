@@ -125,7 +125,7 @@ class Pod(object):
         if target is None:
             target = self.target
         if self.v.get_norm() > 0:
-            return int(self.p.get_distance(self.target) / self.v.get_norm())
+            return math.ceil(self.p.get_distance(self.target) / self.v.get_norm())
         else:
             return int(100)
 
@@ -195,10 +195,12 @@ class Pod(object):
         score = self.score
         return Pod(x, y, vx, vy, angle, checkpoint_id, score)
 
-    def get_angle_and_thrust_max(self, deep_max=3):
+    def get_angle_and_thrust_max(self, deep_max=3, angles=None, thrusts=None):
         """Return bool, angle, thrust, speed max"""
-        angles = [-18, 0, 18]
-        thrusts = [0, 100, 200]
+        if angles is None:
+            angles = [-18, 0, 18]
+        if thrusts is None:
+            thrusts = [0, 100, 200]
         combinations = []
         for a in angles:
             for t in thrusts:
@@ -210,9 +212,12 @@ class Pod(object):
                 res[(a, t)] = (pod.get_distance_checkpoint() < 600, a, t, pod.v.get_norm_to_target(self.next_target))
         else:
             for a, t in combinations:
-                res[(a, t)] = self.next_pod_with_angle(a, t).get_angle_and_thrust_max(deep_max-1)
-        if deep_max == 3:
-            print("RES {}".format(res), file=sys.stderr)
+                new_angles = angles
+                #if a < 0:
+                #    new_angles = new_angles[:2]
+                #if a > 0:
+                #    new_angles = new_angles[1:]
+                res[(a, t)] = self.next_pod_with_angle(a, t).get_angle_and_thrust_max(deep_max-1, angles=new_angles, thrusts=[th for th in thrusts if th >= t])
         feasible = False
         max_speed = 0
         res_angle = 0
@@ -253,6 +258,7 @@ class Pod(object):
         for pod in global_ennemy_pods:
             if pod != self:
                 if pod.next_position().get_distance(self.next_position()) < 800:
+                #if self.is_impact_shield(pod):
                     #check speed to validate vmax ?
                     #if pod.v.get_norm()+self.v.get_norm() < global_vmax*0.2:
                     #    return False
@@ -262,6 +268,17 @@ class Pod(object):
                         return False
                     print("Activate SHIELD", file=sys.stderr)
                     return True
+        return False
+
+    def is_impact_shield(self, pod):
+        step_number = 10
+        step_vect_mine = self.p-self.next_position()
+        step_vect_other = pod.p-pod.next_position()
+        for i in range(1, step_number+1, 1):
+            iter_point_self = (self.p + step_vect_mine*(i/step_number)).to_Point()
+            iter_point_pod = (pod.p + step_vect_other*(i/step_number)).to_Point()
+            if iter_point_pod.get_distance(iter_point_self) < 800:
+                return True
         return False
 
     def get_angle_to_target(self, targeting=None):
@@ -488,8 +505,9 @@ def calculate_new_direction_new_method(pod, ignore_next=True):
         #new_target = pod.p.add_vector(curr_vect - pod.v * max(1, (pod.get_num_tour_to_target()-1)))
         print("{} {} {}".format(int(new_target.x), int(new_target.y), thrust))
     else:
-        if nb <= 3 and False:
-            reachable, angle_to_follow, thrust, speed = pod.get_angle_and_thrust_max(deep_max=min(nb_turns_to_next_target, 3))
+        max_deep = 4
+        if nb <= max_deep and False:
+            reachable, angle_to_follow, thrust, speed = pod.get_angle_and_thrust_max(deep_max=nb)
         else:
             reachable = False
         if reachable:
