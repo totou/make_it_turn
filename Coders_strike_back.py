@@ -478,7 +478,7 @@ def calculate_new_direction(pod, ignore_next=True):
 
 def calculate_new_direction_new_method(pod, ignore_next=True):
     nb_turns_to_next_target = pod.turn_needed_to_orientate_to_next_checkpoint()
-    can_reach, nb = pod.will_reach_target_in_rounds(max(5, nb_turns_to_next_target))# At least check 5 rounds in advance
+    can_reach, nb = pod.will_reach_target_in_rounds(nb_turns_to_next_target)# At least check 5 rounds in advance
     #print("Can reach point {} in {} turns".format(can_reach, nb), file=sys.stderr)
     if not can_reach:
         thrust = pod.calculate_new_thrust(nb_turns_to_next_target)
