@@ -46,6 +46,8 @@ class Pod(object):
         #for 1 to 4 depending on position
         self.rank = rank
         self.behaviour = "race" # Default behaviour is race
+        self.bruiser_target = None
+        self.bruiser_next_target = None
 
     @property
     def x(self):
@@ -67,6 +69,8 @@ class Pod(object):
 
     @property
     def target(self):
+        if self.behaviour != "race":
+            return self.bruiser_target
         return global_checkpoints[self.target_id]
 
     @property
@@ -78,6 +82,8 @@ class Pod(object):
 
     @property
     def next_target(self):
+        if self.behaviour != "race":
+            return self.bruiser_next_target
         if self.target_id < len(global_checkpoints)-1:
             if self.is_last_checkpoint():
                 return global_checkpoints[self.target_id]
@@ -297,10 +303,13 @@ class Pod(object):
         if force_behaviour is not None:
             self.behaviour = force_behaviour
             return self.behaviour
-        if self.score < other.score - 1 and other.rank == 1:
+        if self.score <= other.score - 1 and other.rank == 1:
             self.behaviour = "protect"
             return self.behaviour
-        elif self.score < other.score - 1 and other.rank > 1:
+        elif self.score <= other.score - 1 and other.rank > 1:
+            self.behaviour = "bruiser"
+            return self.behaviour
+        elif self.score == other.score and other.rank > 1 and self.score >= 4:
             self.behaviour = "bruiser"
             return self.behaviour
         else:
@@ -530,6 +539,38 @@ def calculate_new_direction_new_method(pod, ignore_next=True):
             print("{} {} {}".format(int(new_target.x), int(new_target.y), thrust))
 
 
+def get_first_ennemy():
+    if global_ennemy_pods[0].rank < global_ennemy_pods[1].rank:
+        return global_ennemy_pods[0]
+    else:
+        return global_ennemy_pods[1]
+
+def get_my_bruiser():
+    if global_my_pods[0].behaviour != "race":
+        return global_my_pods[0]
+    if global_my_pods[1].behaviour != "race":
+        return global_my_pods[1]
+    return None
+
+def can_bruise_well(my_bruiser, target_ennemy):
+    if target_ennemy.target.get_distance(my_bruiser.p) < target_ennemy.target.get_distance(target_ennemy.p):
+        return True
+    return False
+
+def define_bruiser_targets():
+    my_bruiser = get_my_bruiser()
+    target_ennemy = get_first_ennemy()
+    if my_bruiser is None:
+        return
+    if can_bruise_well(my_bruiser, target_ennemy):
+        my_bruiser.bruiser_target = target_ennemy.p
+        my_bruiser.bruiser_next_target = target_ennemy.p
+    else:
+        # Prepare: go to checkpoint
+        my_bruiser.bruiser_target = target_ennemy.next_target
+        my_bruiser.bruiser_next_target = target_ennemy.p
+    print("Bruisers targets: {} {}".format(my_bruiser.bruiser_target, my_bruiser.bruiser_next_target), file=sys.stderr)
+
 
 global_vmax = 1200
 global_vattenuation = 0.85
@@ -578,6 +619,7 @@ while True:
     # Set behaviours
     global_my_pods[0].set_behaviour(global_my_pods[1])
     global_my_pods[1].set_behaviour(global_my_pods[0])
+    define_bruiser_targets()
 
     # Write an action using print
     # To debug: print("Debug messages...", file=sys.stderr)
