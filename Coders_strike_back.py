@@ -147,24 +147,28 @@ class Pod(object):
             return max_speed
         if self.activate_shield():
             return "SHIELD"
-        if self.get_angle_to_target() > 45:
+        if reachable_in is None and self.get_angle_to_target() > 45:
             return 0
         if reachable_in is not None:
             #print("Reaching target in {} turns".format(reachable_in), file=sys.stderr)
-            if self.get_angle_to_target(self.next_target) < 45 and \
-                self.next_pod_for_destination(self.next_target, max_speed).will_reach_target_in_rounds(reachable_in-1, checkpoint_size):
+            if self.get_angle_to_target(self.next_target) < 45:
+                #self.next_pod_for_destination(self.next_target, max_speed).will_reach_target_in_rounds(reachable_in-1, checkpoint_size):
                 #print("Full thrust", file=sys.stderr)
-                return max_speed
-            #print("Reduce thrust", file=sys.stderr)
-            #check thrust to still pass in checkpoint
-            #pod_list_thrust = [[self.next_pod_for_destination(self.next_target, x), x] for x in range(max_speed,-1,-20)]
-            # print('pod_list_thrust {}'.format(pod_list_thrust), file=sys.stderr)
-            #for pod_t, thrust in pod_list_thrust:
-            #    can_reach_t, _ = pod_t.will_reach_target_in_rounds(reachable_in-1, checkpoint_size)
-            #    print('Reach {}, thrust {}'.format(can_reach_t,thrust), file=sys.stderr)
-            #    if can_reach_t:
-            #        return thrust
-            #print('already going to checkpoint', file=sys.stderr)
+                #return max_speed
+                #print("Reduce thrust", file=sys.stderr)
+                #check thrust to still pass in checkpoint
+                pod_list_thrust = [[self.next_pod_for_destination(self.next_target, x), x] for x in range(max_speed,-1,-20)]
+                # print('pod_list_thrust {}'.format(pod_list_thrust), file=sys.stderr)
+                for pod_t, thrust in pod_list_thrust:
+                    can_reach_t, _ = pod_t.will_reach_target_in_rounds(reachable_in-1, checkpoint_size)
+                    #print('Reach {}, thrust {}'.format(can_reach_t,thrust), file=sys.stderr)
+                    if can_reach_t:
+                        next_angle_to_next_target = pod_t.get_angle_to_target(self.next_target)
+                        if next_angle_to_next_target < 20 and pod_t.p.get_distance(self.next_target) > global_checkpoint_size*pod_t.v.get_norm():
+                            return thrust
+                        elif next_angle_to_next_target < 45:
+                            return min(int(thrust * 5 / next_angle_to_next_target), thrust)
+                #print('already going to checkpoint', file=sys.stderr)
             return 0
             #return int(max_speed * nb / 5)
         return max_speed
@@ -210,7 +214,7 @@ class Pod(object):
         if deep_max <= 0:
             for a, t in combinations:
                 pod = self.next_pod_with_angle(a, t)
-                res[(a, t)] = (pod.get_distance_checkpoint() < 600, a, t, pod.v.get_norm_to_target(self.next_target))
+                res[(a, t)] = (pod.get_distance_checkpoint() < global_checkpoint_size, a, t, pod.v.get_norm_to_target(self.next_target))
         else:
             for a, t in combinations:
                 new_angles = angles
@@ -259,8 +263,8 @@ class Pod(object):
             return False
         for pod in global_ennemy_pods:
             if pod != self:
-                #if pod.next_position().get_distance(self.next_position()) < 800:
-                if self.is_impact_shield(pod):
+                if pod.next_position().get_distance(self.next_position()) < 800:
+                #if self.is_impact_shield(pod):
                     #check speed to validate vmax ?
                     #if pod.v.get_norm()+self.v.get_norm() < global_vmax*0.2:
                     #    return False
@@ -497,10 +501,10 @@ def calculate_new_direction(pod, ignore_next=True):
 
 def calculate_new_direction_new_method(pod, ignore_next=True):
     nb_turns_to_next_target = pod.turn_needed_to_orientate_to_next_checkpoint()
-    can_reach, nb = pod.will_reach_target_in_rounds(nb_turns_to_next_target)# At least check 5 rounds in advance
+    can_reach, nb = pod.will_reach_target_in_rounds(nb_turns_to_next_target, global_checkpoint_size)# At least check 5 rounds in advance
     #print("Can reach point {} in {} turns".format(can_reach, nb), file=sys.stderr)
     if not can_reach:
-        thrust = pod.calculate_new_thrust(nb_turns_to_next_target)
+        thrust = pod.calculate_new_thrust(nb_turns_to_next_target, global_checkpoint_size)
         curr_vect = pod.calculate_new_direction_for_target()
         new_target = pod.p.add_vector(curr_vect)
         #curr_vect = pod.target - pod.p
@@ -520,7 +524,7 @@ def calculate_new_direction_new_method(pod, ignore_next=True):
             print("{} {} {}".format(int(new_target.x), int(new_target.y), thrust))
         else:
             # Like old times
-            thrust = pod.calculate_new_thrust(nb_turns_to_next_target, reachable_in=nb)
+            thrust = pod.calculate_new_thrust(nb_turns_to_next_target, global_checkpoint_size, reachable_in=nb)
             curr_vect = pod.calculate_new_direction_for_target(pod.next_target, reachable_in=nb)
             new_target = pod.p.add_vector(curr_vect)
             print("{} {} {}".format(int(new_target.x), int(new_target.y), thrust))
@@ -529,6 +533,7 @@ def calculate_new_direction_new_method(pod, ignore_next=True):
 
 global_vmax = 1200
 global_vattenuation = 0.85
+global_checkpoint_size = 600
 global_max_rotation = 18
 global_my_pods = [None, None]
 global_ennemy_pods = [None, None]
