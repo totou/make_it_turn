@@ -267,29 +267,40 @@ class Pod(object):
     def activate_shield(self):
         if global_turn < 20:
             return False
+        res = False
         for pod in global_ennemy_pods:
             if pod != self:
-                if pod.next_position().get_distance(self.next_position()) < 800:
-                #if self.is_impact_shield(pod):
+                #if pod.next_position().get_distance(self.next_position()) < 800:
+                if self.is_impact_shield(pod):
                     #check speed to validate vmax ?
                     #if pod.v.get_norm()+self.v.get_norm() < global_vmax*0.2:
                     #    return False
                     #check angle
                     if Point(0, 0).angle_three_point(pod.v.to_Point(), self.v.to_Point()) < 25 and \
-                        pod.v.get_norm() - self.v.get_norm() < global_vmax*0.2:
-                        return False
+                            pod.v.get_norm() - self.v.get_norm() < global_vmax*0.3:
+                        res = False
                     print("Activate SHIELD", file=sys.stderr)
                     return True
-        return False
+        if self.behaviour == "race":  # The first pod should also shield if collision with our other pod
+            for pod in global_my_pods:
+                if self != pod:
+                    if pod.next_position().get_distance(self.next_position()) < 800 \
+                            and pod.v.get_norm() > global_vmax*0.3:
+                        return True
+        return res
 
     def is_impact_shield(self, pod):
-        step_number = 10
-        step_vect_mine = self.p-self.next_position()
-        step_vect_other = pod.p-pod.next_position()
+        step_number = 8
+        #print("Starting points are {} {}".format(self.p, pod.p), file=sys.stderr)
+        #print("Next positions are {} {}".format(self.next_position(), pod.next_position()), file=sys.stderr)
+        step_vect_mine = (self.next_position()-self.p) * (1/step_number)
+        step_vect_other = (pod.next_position()-pod.p) * (1/step_number)
         for i in range(1, step_number+1, 1):
-            iter_point_self = (self.p + step_vect_mine*(i/step_number)).to_Point()
-            iter_point_pod = (pod.p + step_vect_other*(i/step_number)).to_Point()
+            iter_point_self = (self.p + step_vect_mine*i).to_Point()
+            iter_point_pod = (pod.p + step_vect_other*i).to_Point()
+            #print("Points are {} {}".format(iter_point_self, iter_point_pod), file=sys.stderr)
             if iter_point_pod.get_distance(iter_point_self) < 800:
+                #print("Impact detected", file=sys.stderr)
                 return True
         return False
 
@@ -306,10 +317,13 @@ class Pod(object):
         if self.score <= other.score - 1 and other.rank == 1:
             self.behaviour = "protect"
             return self.behaviour
+        elif self.score <= other.score - 1 and other.rank == 1 and self.rank == 2:# If my 2 pods are first, run...
+            self.behaviour = "race"
+            return self.behaviour
         elif self.score <= other.score - 1 and other.rank > 1:
             self.behaviour = "bruiser"
             return self.behaviour
-        elif self.score == other.score and other.rank > 1 and self.score >= 4:
+        elif self.score == other.score and other.rank > 1 and self.score >= 3:
             self.behaviour = "bruiser"
             return self.behaviour
         else:
@@ -563,13 +577,13 @@ def define_bruiser_targets():
     if my_bruiser is None:
         return
     if can_bruise_well(my_bruiser, target_ennemy):
-        my_bruiser.bruiser_target = target_ennemy.p
-        my_bruiser.bruiser_next_target = target_ennemy.p
+        my_bruiser.bruiser_target = target_ennemy.next_position()
+        my_bruiser.bruiser_next_target = my_bruiser.bruiser_target
     else:
         # Prepare: go to checkpoint
         my_bruiser.bruiser_target = target_ennemy.next_target
         my_bruiser.bruiser_next_target = target_ennemy.p
-    print("Bruisers targets: {} {}".format(my_bruiser.bruiser_target, my_bruiser.bruiser_next_target), file=sys.stderr)
+    #print("Bruisers targets: {} {}".format(my_bruiser.bruiser_target, my_bruiser.bruiser_next_target), file=sys.stderr)
 
 
 global_vmax = 1200
