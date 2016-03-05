@@ -315,20 +315,21 @@ class Pod(object):
             self.behaviour = force_behaviour
             return self.behaviour
         if self.score <= other.score - 1 and other.rank == 1:
+            #print("Type 1", file=sys.stderr)
             self.behaviour = "protect"
-            return self.behaviour
         elif self.score <= other.score - 1 and other.rank == 1 and self.rank == 2:# If my 2 pods are first, run...
+            #print("Type 2", file=sys.stderr)
             self.behaviour = "race"
-            return self.behaviour
         elif self.score <= other.score - 1 and other.rank > 1:
+            #print("Type 3", file=sys.stderr)
             self.behaviour = "bruiser"
-            return self.behaviour
-        elif self.score == other.score and other.rank > 1 and self.score >= 3:
+        elif self.score == other.score and other.rank > 1 and self.score >= 3 and self.p.get_distance(self.target) > other.p.get_distance(self.target):
+            #print("Type 4", file=sys.stderr)
             self.behaviour = "bruiser"
-            return self.behaviour
         else:
             self.behaviour = "race"
-            return self.behaviour
+        #print("I am a {}".format(self.behaviour), file=sys.stderr)
+        return self.behaviour
 
     def __str__(self):
         res = ''
